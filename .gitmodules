@@ -1,0 +1,3 @@
+[submodule "components/lcd_1602_i2c_driver"]
+	path = components/lcd_1602_i2c_driver
+	url = https://github.com/lafftale1999/lcd_1602_i2c_driver.git
