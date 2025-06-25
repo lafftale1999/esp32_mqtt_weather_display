@@ -1,2 +1,4 @@
-idf_component_register(SRCS "main.c"
-                    INCLUDE_DIRS ".")
+idf_component_register(SRCS "main.c" "src/esp32_wifi.c"
+                    INCLUDE_DIRS "." "include"
+                    PRIV_INCLUDE_DIRS "../credentials"
+                    )
