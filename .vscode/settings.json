@@ -17,7 +17,8 @@
     "--compile-commands-dir=c:\\Users\\prett\\Desktop\\dev\\esp32_mqtt_weather_display\\build"
   ],
   "files.associations": {
-    "lcd_1602.h": "c"
+    "lcd_1602.h": "c",
+    "esp32_mqtt.h": "c"
   },
   "idf.flashType": "UART"
 }

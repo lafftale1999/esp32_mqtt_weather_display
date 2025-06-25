@@ -3,6 +3,7 @@
 
 #include "lcd_1602.h"
 #include "esp32_wifi.h"
+#include "esp32_mqtt.h"
 
 const char* TAG = "main";
 
@@ -32,12 +33,23 @@ int app_main(void)
     ESP_ERROR_CHECK(wifi_init());
     wait_for_connection();
 
-    // mqtt init
+    esp_mqtt_client_handle_t mqtt_handle;
+    if (mqtt_open(&mqtt_handle) != 0) {
+        ESP_LOGE(TAG, "Unable to initialize MQTT");
+        return 1;
+    }
+
+    xTaskCreate(mqtt_main_loop, "mqtt_main_loop", 4096, NULL, 5, NULL);
+
+    char *string = NULL;
 
     while(1) {
-        lcd_1602_send_string(dev_handle, "hello world");
-
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        if((string = mqtt_get_parsed_string()) != NULL) {
+            ESP_LOGE(TAG, "%s", string);
+            lcd_1602_send_string(dev_handle, string);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
     return 0;
