@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -12,10 +13,19 @@
 #include "esp_netif.h"
 
 static const char *WIFI_TAG = "WIFI";
-EventGroupHandle_t wifi_event_group;
-const int WIFI_CONNECTED_BIT = BIT0;
-static esp_netif_t *station_network_interface = NULL;
 
+EventGroupHandle_t wifi_event_group;                    /**< event group handle for flags */
+const int WIFI_CONNECTED_BIT = BIT0;                    /**< bit for setting connected in event group */
+static esp_netif_t *station_network_interface = NULL;   /**< handle for setting up wifi mode */
+
+/**
+ * @brief event handler registered to receive wifi events.
+ * 
+ * @param arg void pointer to pass arguments to handler
+ * @param event_base type of event to listen after
+ * @param event_id which id of events to listen to
+ * @param event_data data related to the event
+ */
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     int32_t event_id, void *event_data)
 {
@@ -39,18 +49,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 esp_err_t wifi_init(){
     wifi_event_group = xEventGroupCreate();
 
-    esp_err_t ret = ESP_OK;
-    ret = esp_netif_init();
-    ret = esp_event_loop_create_default();
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     station_network_interface = esp_netif_create_default_wifi_sta();
+    if(station_network_interface == NULL) return ESP_FAIL;
 
     wifi_init_config_t config = WIFI_INIT_CONFIG_DEFAULT();
 
-    ret = esp_wifi_init(&config);
-
-    ret = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL);
-    ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL);
+    ESP_ERROR_CHECK(esp_wifi_init(&config));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -59,12 +68,12 @@ esp_err_t wifi_init(){
         },
     };
 
-    ret = esp_wifi_set_mode(WIFI_MODE_STA);
-    ret = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
-    ret = esp_wifi_start();
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(WIFI_TAG, "WiFi init done");
-    return ret;
+    return ESP_OK;
 }
 
 bool wifi_is_connected() {
@@ -72,15 +81,18 @@ bool wifi_is_connected() {
     return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
-esp_err_t wait_for_connection(void) {
-    xEventGroupWaitBits(
-        wifi_event_group,   // EventGroup
-        WIFI_CONNECTED_BIT, // EventBit
-        pdFALSE,            // Don't clear bit
-        pdTRUE,             // wait for all bits
-        portMAX_DELAY);     // Wait until true
+esp_err_t wait_for_connection(const int wait_ms) {
+    EventBits_t bits = xEventGroupWaitBits(
+        wifi_event_group,
+        WIFI_CONNECTED_BIT,
+        pdFALSE,
+        pdTRUE,
+        pdMS_TO_TICKS(wait_ms));
     
-    ESP_LOGI(WIFI_TAG, "Wifi is connected!");
+    if (bits & WIFI_CONNECTED_BIT) {
+        ESP_LOGI(WIFI_TAG, "Wifi is connected!");
+        return ESP_OK;
+    }
 
-    return ESP_OK;
+    return ESP_FAIL;
 }
