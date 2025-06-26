@@ -48,6 +48,12 @@ static void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
+/**
+ * @brief json parser using cJSON. This parses the payload saved in the
+ * static mqtt_message variable into a string to be written on the lcd.
+ * 
+ * @return 0 for success. 1 for failed.
+ */
 static uint8_t parse_json_string() {
     cJSON *root = cJSON_Parse(mqtt_message.payload);
     ESP_LOGI(TAG, "Payload parsing: %s", mqtt_message.payload);
@@ -74,6 +80,14 @@ static uint8_t parse_json_string() {
     return 1;
 }
 
+/**
+ * @brief saves the data to the static mqtt_message variable.
+ * 
+ * @param topic the message's topic.
+ * @param payload the message's payload.
+ * 
+ * @return 0 for Success. 1 for fail.
+ */
 static uint8_t mqtt_save_data(const char* topic, const char* payload) {
     for(size_t i = 0; i < MQTT_MAX_TRIES_SAVE; i++) {
         if (xSemaphoreTake(mqtt_message.mutex, pdMS_TO_TICKS(MQTT_WAIT_FOR_MUTEX_MS)) == pdTRUE) {
@@ -93,6 +107,8 @@ static uint8_t mqtt_save_data(const char* topic, const char* payload) {
  * @brief Event handler registered to receive MQTT events
  *
  *  This function is called by the MQTT client event loop.
+ *  If the device is unable to reconnect after loosing connection,
+ *  it will restart.
  *
  * @param handler_args user data registered to the event.
  * @param base Event base for the handler(always MQTT Base in this example).
@@ -121,7 +137,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
             vTaskDelay(pdMS_TO_TICKS(MQTT_RECONNECT_REST_MS));
         }
-        
+
+        esp_restart();
         break;
 
     case MQTT_EVENT_SUBSCRIBED:
@@ -198,7 +215,6 @@ uint8_t mqtt_open(esp_mqtt_client_handle_t *handle)
     ESP_LOGI(TAG, "[APP] Free memory: %" PRIu32 " bytes", esp_get_free_heap_size());
     *handle = esp_mqtt_client_init(&mqtt_cfg);
     
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     if (esp_mqtt_client_register_event(*handle, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register mqtt_event_handler");
         return 1;
@@ -227,7 +243,9 @@ void mqtt_main_loop(void *pvParam) {
 
     while(1) {
         if (xQueueReceive(message_queue_handle, &msg, portMAX_DELAY) == pdTRUE) {
-            mqtt_save_data(msg.topic, msg.payload);
+            if (mqtt_save_data(msg.topic, msg.payload) != 0) {
+                ESP_LOGE(TAG, "mqtt_save_data() - Unable to save data!");
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
