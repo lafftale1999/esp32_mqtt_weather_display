@@ -20,9 +20,15 @@
 #define HUM_DIVISION_VAL        1024.0f
 #define PRESS_DIVISION_VAL      (256.0f * 100.0f) 
 
+#define MQTT_RECONNECT_TRIES    5
+#define MQTT_RECONNECT_REST_MS  1000
+
 #include <stdint.h>
 #include "mqtt_client.h"
 
+/**
+ * @brief intializes the mqtt connection. 
+ */
 uint8_t mqtt_open(esp_mqtt_client_handle_t *handle);
 char* mqtt_get_parsed_string();
 void mqtt_main_loop(void *pvParam);

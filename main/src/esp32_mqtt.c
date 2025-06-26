@@ -48,13 +48,13 @@ static void log_error_if_nonzero(const char *message, int error_code)
     }
 }
 
-static void parse_json_string() {
+static uint8_t parse_json_string() {
     cJSON *root = cJSON_Parse(mqtt_message.payload);
     ESP_LOGI(TAG, "Payload parsing: %s", mqtt_message.payload);
 
     if (!root) {
-        printf("JSON parse error\n");
-        return;
+        ESP_LOGE(TAG, "JSON parse error");
+        return 1;
     }
 
     const cJSON *temp = cJSON_GetObjectItem(root, MQTT_JSON_TEMP_KEY);
@@ -66,8 +66,12 @@ static void parse_json_string() {
         float humidity = hum->valuedouble / HUM_DIVISION_VAL;
         float pressure = press->valuedouble / PRESS_DIVISION_VAL;
 
-        snprintf(mqtt_message.parsed_string, sizeof(mqtt_message.parsed_string), "T:%.1fC H:%.1f%% P:%.fhPa", temperature, humidity, pressure);
+        snprintf(mqtt_message.parsed_string, sizeof(mqtt_message.parsed_string), "T:%.1fC H:%.1f%% \nP:%.fhPa", temperature, humidity, pressure);
+        return 0;
     }
+
+    ESP_LOGE(TAG, "Values are not numbers...");
+    return 1;
 }
 
 static uint8_t mqtt_save_data(const char* topic, const char* payload) {
@@ -75,10 +79,10 @@ static uint8_t mqtt_save_data(const char* topic, const char* payload) {
         if (xSemaphoreTake(mqtt_message.mutex, pdMS_TO_TICKS(MQTT_WAIT_FOR_MUTEX_MS)) == pdTRUE) {
             snprintf(mqtt_message.topic, sizeof(mqtt_message.topic), "%s", topic);
             snprintf(mqtt_message.payload, sizeof(mqtt_message.payload), "%s", payload);
-            parse_json_string();
+            uint8_t err = parse_json_string();
 
             xSemaphoreGive(mqtt_message.mutex);
-            return 0;
+            return err;
         }
     }   
 
@@ -100,7 +104,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%" PRIi32, base, event_id);
     esp_mqtt_event_handle_t event = event_data;
     esp_mqtt_client_handle_t client = event->client;
-    int msg_id;
+
     switch ((esp_mqtt_event_id_t)event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
@@ -109,6 +113,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        
+        for (size_t i = 0; i < MQTT_RECONNECT_TRIES; i++) {
+            if (esp_mqtt_client_reconnect(client) != ESP_OK) {
+                break;
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(MQTT_RECONNECT_REST_MS));
+        }
+        
         break;
 
     case MQTT_EVENT_SUBSCRIBED:
@@ -144,9 +157,13 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             log_error_if_nonzero("reported from tls stack", event->error_handle->esp_tls_stack_err);
             log_error_if_nonzero("captured as transport's socket errno",  event->error_handle->esp_transport_sock_errno);
             ESP_LOGI(TAG, "Last errno string (%s)", strerror(event->error_handle->esp_transport_sock_errno));
-
         }
         break;
+    
+    case MQTT_EVENT_BEFORE_CONNECT:
+        ESP_LOGI(TAG, "MQTT_EVENT_BEFORE_CONNECT");
+        break;
+    
     default:
         ESP_LOGI(TAG, "Other event id:%d", event->event_id);
         break;
