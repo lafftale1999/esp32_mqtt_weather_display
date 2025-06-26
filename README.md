@@ -3,6 +3,8 @@
 ## About the project
 This is an addon to the project [raspberry_pi_pico_temp_sensor_reader](https://github.com/lafftale1999/raspberry_pi_pico_temp_sensor_reader.git) where I publish sensor values to a Mosquitto MQTT broker. This system then subscribes to the same topic as the sensor device and then displays this on the LCD screen using my driver [lcd_1602_i2c_driver](https://github.com/lafftale1999/lcd_1602_i2c_driver.git). The connection is made over WIFI using MTLS.
 
+If you need help with setting up a broker and generating certificates you can use this project: https://github.com/lafftale1999/Mosquitto_MQTT_Docker
+
 ## Pre-requesites
 
 ### 1. LCD 1602 I2C Driver
